@@ -4,15 +4,18 @@ from app.services.audio_utils import slice_audio
 from app.services.emotion_model import EmotionDetectorLocal
 import requests
 import shutil
-from tempfile import NamedTemporaryFile
+from pathlib import Path
 import os
+import imageio_ffmpeg
 import librosa
 from app.logger import logger
-from app.main import get_api_key  # Import the API key validation function
+from app.auth import get_api_key 
 
-SLICE_DURATION = 15  # seconds
+SLICE_DURATION = 5  # seconds
 RMS_THRESHOLD = 0.01
 SAMPLING_RATE = 16000
+ASSETS_DIR = Path("assets")
+ASSETS_DIR.mkdir(exist_ok=True) 
 
 router = APIRouter()
 
@@ -27,20 +30,22 @@ def wake_up():
 
 @router.get("/predict")
 def predict_emotions(
+    call_id: int,
     audio_url: HttpUrl,
     delete_after_process: bool = Query(True),
     api_key: str = Depends(get_api_key)  # API key validation
 ):
     logger.info(f"Prediction request received for audio URL: {audio_url}")
+    local_path = ASSETS_DIR / f"{call_id}.wav"
 
     try:
         # Download the audio file from the URL
         response = requests.get(audio_url, stream=True)
         response.raise_for_status()
 
-        with NamedTemporaryFile(delete=False, suffix=".wav") as tmp_file:
-            shutil.copyfileobj(response.raw, tmp_file)
-            local_path = tmp_file.name
+        with open(local_path, "wb") as f:
+            for chunk in response.iter_content(chunk_size=8192):
+                f.write(chunk)
 
         logger.info(f"Audio downloaded to: {local_path}")
     except Exception as e:

@@ -3,11 +3,12 @@ RMS_THRESHOLD = 0.01
 SAMPLING_RATE = 16000
 
 import os
-from pydantic import BaseSettings
+from pydantic_settings import BaseSettings 
 
 class Settings(BaseSettings):
     API_KEY: str
-    CORS_ORIGINS: str
+    CORS_ORIGIN: str
+    huggingface_token: str
 
     class Config:
         env_file = ".env"

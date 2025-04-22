@@ -1,30 +1,20 @@
-from fastapi import FastAPI, Depends, HTTPException, Header
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.security import HTTPBearer
+from fastapi import FastAPI
 from app.router import inference
-from app.config import settings
+from fastapi.middleware.cors import CORSMiddleware
+from app.auth import get_api_key
 
+from app.config.settings import settings
 
 app = FastAPI()
 
-
+# CORS setup
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[settings.CORS_ORIGINS],
+    allow_origins=[settings.CORS_ORIGIN],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-api_key_scheme = HTTPBearer()
-
-# Function to get API key from headers and validate it
-def get_api_key(authorization: str = Depends(api_key_scheme)) -> str:
-    api_key = authorization.credentials
-    if api_key != settings.API_KEY:
-        raise HTTPException(status_code=403, detail="Forbidden: Invalid API key")
-    return api_key
-
-# inference router
+# Include routers
 app.include_router(inference.router)
-

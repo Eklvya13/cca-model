@@ -2,15 +2,15 @@ from transformers import Wav2Vec2FeatureExtractor, Wav2Vec2ForSequenceClassifica
 import torch
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-POLARITY_MAP = {"happy": "positive", "angry": "negative", "fear": "negative", "sad": "negative", "neutral": "neutral", "disgust": "negative", "surprise": "neutral"}
+POLARITY_MAP = {"happy": "positive", "angry": "negative", "calm": "positive", "sad": "negative", "neutral": "neutral", "disgust": "negative", "surprised": "positive", 'fearful': "negative"}
 
 class EmotionDetectorLocal:
     def __init__(self):
         self.feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained(
-            "r-f/wav2vec-english-speech-emotion-recognition"
+            "ehcalabres/wav2vec2-lg-xlsr-en-speech-emotion-recognition"
         )
         self.model = Wav2Vec2ForSequenceClassification.from_pretrained(
-            "r-f/wav2vec-english-speech-emotion-recognition"
+            "ehcalabres/wav2vec2-lg-xlsr-en-speech-emotion-recognition"
         ).to(DEVICE)
         self.model.eval()
 
