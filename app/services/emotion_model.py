@@ -1,48 +1,73 @@
-from transformers import Wav2Vec2FeatureExtractor, Wav2Vec2ForSequenceClassification
+from transformers import AutoModelForAudioClassification, AutoFeatureExtractor
 import torch
+import os
+
+# Make sure this path points to the locally downloaded model dir in your Docker image
+LOCAL_MODEL_PATH = "models/whisper-large-v3-emotion"
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-POLARITY_MAP = {"happy": "positive", "angry": "negative", "calm": "positive", "sad": "negative", "neutral": "neutral", "disgust": "negative", "surprised": "positive", 'fearful': "negative"}
+
+# Updated emotion label map — please double-check the exact label set from the config
+POLARITY_MAP = {
+    "happy": "positive",
+    "angry": "negative",
+    "calm": "positive",
+    "sad": "negative",
+    "neutral": "neutral",
+    "disgust": "negative",
+    "surprised": "positive",
+    "fearful": "negative"
+}
 
 class EmotionDetectorLocal:
     def __init__(self):
-        self.feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained(
-            "ehcalabres/wav2vec2-lg-xlsr-en-speech-emotion-recognition"
-        )
-        self.model = Wav2Vec2ForSequenceClassification.from_pretrained(
-            "ehcalabres/wav2vec2-lg-xlsr-en-speech-emotion-recognition"
-        ).to(DEVICE)
+        self.feature_extractor = AutoFeatureExtractor.from_pretrained(LOCAL_MODEL_PATH)
+        self.model = AutoModelForAudioClassification.from_pretrained(LOCAL_MODEL_PATH).to(DEVICE)
         self.model.eval()
+        self.id2label = self.model.config.id2label
+        print(DEVICE)
+
+    def preprocess_audio(self, audio_array, sampling_rate=16000, max_duration=30.0):
+        max_length = int(self.feature_extractor.sampling_rate * max_duration)
+        if len(audio_array) > max_length:
+            audio_array = audio_array[:max_length]
+        else:
+            audio_array = torch.nn.functional.pad(
+                torch.tensor(audio_array), (0, max_length - len(audio_array))
+            )
+
+        inputs = self.feature_extractor(
+            audio_array.numpy(),
+            sampling_rate=self.feature_extractor.sampling_rate,
+            max_length=max_length,
+            truncation=True,
+            return_tensors="pt",
+        )
+        return inputs
 
     def predict_batch(self, audio_slices, sampling_rate):
-        inputs = self.feature_extractor(
-            audio_slices,
-            sampling_rate=sampling_rate,
-            return_tensors="pt",
-            padding=True,
-            truncation=True,
-            max_length=250000
-        )
-        input_values = inputs["input_values"].to(DEVICE)
-        attention_mask = inputs["attention_mask"].to(DEVICE)
-
-        with torch.no_grad():
-            outputs = self.model(input_values=input_values, attention_mask=attention_mask)
-            probs = torch.nn.functional.softmax(outputs.logits, dim=-1)
-
         results = []
-        for i in range(len(audio_slices)):
-            confidence, predicted_label = torch.max(probs[i], dim=-1)
-            emotion = self.model.config.id2label[predicted_label.item()]
-            emotion_score = round(confidence.item(), 4)
+        for audio_slice in audio_slices:
+            inputs = self.preprocess_audio(audio_slice, sampling_rate)
+            inputs = {key: value.to(DEVICE) for key, value in inputs.items()}
+            
+            with torch.no_grad():
+                outputs = self.model(**inputs)
+            
+            logits = outputs.logits
+            predicted_id = torch.argmax(logits, dim=-1).item()
+            predicted_label = self.id2label[predicted_id]
+            
+            emotion = predicted_label
+            emotion_score = round(torch.nn.functional.softmax(logits, dim=-1)[0, predicted_id].item(), 4)
             absolute_emotion = POLARITY_MAP.get(emotion, "neutral")
-
+            
             results.append({
                 "real_emotion": emotion,
                 "absolute_emotion": absolute_emotion,
                 "emotion_score": emotion_score,
             })
-
+        
         return results
 
     def predict_in_mini_batches(self, audio_slices, batch_size=4, sampling_rate=16000):

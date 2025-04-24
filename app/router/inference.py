@@ -10,6 +10,7 @@ import imageio_ffmpeg
 import librosa
 from app.logger import logger
 from app.auth import get_api_key 
+import torch
 
 SLICE_DURATION = 5  # seconds
 RMS_THRESHOLD = 0.01
@@ -21,7 +22,9 @@ router = APIRouter()
 
 @router.get("/health")
 def health_check():
-    return {"status": "ok"}
+    DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
+    return {"status": "ok",
+            "is_cuda_Device": DEVICE}
 
 @router.get("/wake")
 def wake_up():
